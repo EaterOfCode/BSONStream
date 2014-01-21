@@ -67,6 +67,7 @@ BSONStream.prototype._transform = function(chunk, encoding, done) {
             case BSONStream.PARSETYPE:
                 if (buffer.length > 0) {
                     if (buffer[0] == 0) {
+                        buffer = buffer.slice(1);
                         this._finishObject();
                     } else {
                         this._currentDocument = {
@@ -129,9 +130,6 @@ BSONStream.prototype._transform = function(chunk, encoding, done) {
                         break;
                     case BSONStream.INT:
                         if (buffer.length > 3) {
-                            console.log({
-                                d: buffer.toString('hex')
-                            });
                             this._currentDocument.value = buffer.readInt32LE(0);
                             buffer = buffer.slice(4);
                             this._finishObject();
@@ -150,6 +148,9 @@ BSONStream.prototype._transform = function(chunk, encoding, done) {
                     case BSONStream.OBJECT:
                         this._state = BSONStream.PARSELIST;
                         break;
+                    default:
+                        throw new Error("BSON Stream: type #" + this._currentDocument.type + " not implemented");
+                        cont = false;
                 }
                 break;
         }
@@ -182,14 +183,16 @@ BSONStream.prototype._buildValue = function(document) {
             return document.value;
         case BSONStream.ARRAY:
             var array = new Array(document.children.length);
-            for (var i = array.length - 1; i >= 0; i--) {
+            var l = array.length;
+            for (var i = 0; i < l; i++) {
                 var child = document.children[i];
                 array[child.name] = this._buildValue(child);
             };
             return array;
         case BSONStream.OBJECT:
             var array = {};
-            for (var i = document.children.length - 1; i >= 0; i--) {
+            var l = document.children.length;
+            for (var i = 0; i < l; i++) {
                 var child = document.children[i];
                 array[child.name] = this._buildValue(child);
             };
