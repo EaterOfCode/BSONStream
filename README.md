@@ -27,6 +27,9 @@ bsonStream.on("done",function(obj){
 process.stdin.pipe(bsonStream);
 
 ```
+
+Installing is done via `npm i bsonstream`
+
 To do and handicaps
 =============
 
