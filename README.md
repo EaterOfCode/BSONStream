@@ -16,6 +16,7 @@ var BSONStream = require("bsonstream"),
 // is a new element found in the main object
 bsonStream.on("data",function(obj){
   // obj is an obj with two values, name and value
+  // obj.name is an array with the path to the object
   console.log(obj.name,obj.value);
 });
 // done is called when the whole document is parsed
@@ -37,13 +38,9 @@ The following types are still not done and are on the to-do:
 
 * Binary data
 * ObjectId
-* UTC datetime
-* Regular Expression
 * JavaScript code w/ scope
-* Timestamp
-* 64 bit int
-* Min key (I have no idea what those are yet?)
-* Max key (I have no idea what those are yet?)
+* Min key
+* Max key
 
 License
 =========

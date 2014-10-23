@@ -1,4 +1,5 @@
 var util = require('util');
+var Long = require('long');
 var Transform = require('stream').Transform;
 util.inherits(BSONStream, Transform);
 
@@ -26,11 +27,14 @@ BSONStream.DOUBLE = 1;
 BSONStream.STRING = 2;
 BSONStream.OBJECT = 3;
 BSONStream.ARRAY = 4;
-//BSONStream.BINARY = "\x05";
+BSONStream.BINARY = 5;
 BSONStream.BOOLEAN = 8;
+BSONStream.UTCDATETIME = 9;
 BSONStream.NULL = 10;
+BSONStream.REGEX = 11;
 BSONStream.INT = 16;
-//BSONStream.INT64 = "\x12";
+BSONStream.TIMESTAMP = 17;
+BSONStream.INT64 = 18;
 
 BSONStream.prototype._transform = function(chunk, encoding, done) {
     var buffer = this._buffer = Buffer.concat([this._buffer, chunk]);
@@ -128,6 +132,29 @@ BSONStream.prototype._transform = function(chunk, encoding, done) {
                         this._currentDocument.value = null;
                         this._finishObject();
                         break;
+					case BSONStream.REGEX:
+						var lastStart = this._currentDocument.lastStart || 0
+						var searchedTill = this._currentDocument.searchedTill || 0;
+						var parts = this._currentDocument.value;
+						if(!parts){
+							this._currentDocument.value = [];
+						};
+						cont = false;
+						for(;searchedTill < buffer.length; searchedTill++){
+							var currentByte = buffer[searchedTill];
+							if(currentByte === 0){
+								parts.push(buffer.slice(lastStart, searchedTill).toString('utf8'));
+								lastStart = this._currentDocument.lastStart = searchedTill + 1;
+								if(parts.length > 1){
+									cont = true;
+									buffer = buffer.slice(searchedTill + 1);
+									this._finishObject();
+									break;
+								}
+							}
+						}
+						this._currentDocument.searchedTill = searchedTill;
+						break;
                     case BSONStream.INT:
                         if (buffer.length > 3) {
                             this._currentDocument.value = buffer.readInt32LE(0);
@@ -135,21 +162,22 @@ BSONStream.prototype._transform = function(chunk, encoding, done) {
                             this._finishObject();
                         } else cont = false;
                         break;
-                        /* TO DO
+					case BSONStream.UTCDATETIME:
+					case BSONStream.TIMESTAMP:
                     case BSONStream.INT64:
-
-                        if (buffer.length > 7) {
-                            this._currentDocument.value = buffer.readInt64LE(0);
-                            buffer = buffer.slice(4);
+						if (buffer.length > 7) {
+                            this._currentDocument.value = new Long(buffer.readInt32LE(0),buffer.readInt32LE(4), true);
+							console.log(buffer);
+                            buffer = buffer.slice(8);
                             this._finishObject();
                         } else cont = false;
-                        break;*/
+						break;
                     case BSONStream.ARRAY:
                     case BSONStream.OBJECT:
                         this._state = BSONStream.PARSELIST;
                         break;
                     default:
-                        throw new Error("BSON Stream: type #" + this._currentDocument.type + " not implemented");
+                        throw new Error("BSON Stream: type #" + this._currentDocument.type + " not implemented for element: " + this._currentDocument.name);
                         cont = false;
                 }
                 break;
@@ -163,24 +191,18 @@ BSONStream.prototype._finishObject = function() {
     if (this._currentDocument.father.isBasement) {
         this.emit("done", this._buildObject(this._currentDocument).value);
         this._cancelLoop();
-    } else if (this._currentDocument.father.isTree) {
+    } else if (this._currentDocument.father) {
         this.push(this._buildObject(this._currentDocument));
         this._currentDocument = this._currentDocument.father;
         this._state = BSONStream.PARSETYPE;
-    } else if (this._currentDocument.father) {
+    /*} else if (this._currentDocument.father) {
         this._currentDocument = this._currentDocument.father;
-        this._state = BSONStream.PARSETYPE;
-    }
+        this._state = BSONStream.PARSETYPE;*/
+	}
 }
 
 BSONStream.prototype._buildValue = function(document) {
     switch (document.type) {
-        case BSONStream.DOUBLE:
-        case BSONStream.NULL:
-        case BSONStream.STRING:
-        case BSONStream.INT:
-        case BSONStream.BOOLEAN:
-            return document.value;
         case BSONStream.ARRAY:
             var array = new Array(document.children.length);
             var l = array.length;
@@ -197,12 +219,27 @@ BSONStream.prototype._buildValue = function(document) {
                 array[child.name] = this._buildValue(child);
             };
             return array;
+		case BSONStream.REGEX:
+			return new RegExp(document.value[0], document.value[1]);
+		case BSONStream.TIMESTAMP:
+		case BSONStream.UTCDATETIME:
+			return new Date(document.value.toNumber());
     }
+	return document.value;
+}
+
+BSONStream.prototype._buildName = function(document){
+	var name = [];
+	do{
+		name.unshift(document.name);
+	}while((document = document.father) && (!document.isBasement));
+	name.shift();
+	return name;
 }
 
 BSONStream.prototype._buildObject = function(document) {
     return {
-        name: document.name,
+        name: this._buildName(document),
         value: this._buildValue(document)
     };
 }

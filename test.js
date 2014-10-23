@@ -9,9 +9,11 @@ testStream.on("done", function(a) {
 });
 var Pure = (new BSON.pure);
 var bin = (new Pure.BSON).serialize({
-    d: 'Hey',
+    dy: 'Hey',
+	"☺": new Date,
     a: 6.7,
     g: 457,
+	y: /gog/i,
     f: {
         "dope": "HEALING POWERZ",
         strength: null,
